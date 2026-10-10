@@ -160,6 +160,11 @@ function App() {
                 A captura só começa após sua ativação. Os dados são processados
                 no dispositivo e não são enviados nem armazenados pelo app.
               </Text>
+              {status?.targetPackages.length ? (
+                <Text style={styles.mutedText}>
+                  Pacotes monitorados: {status.targetPackages.join(', ')}
+                </Text>
+              ) : null}
             </View>
 
             {statusError ? (

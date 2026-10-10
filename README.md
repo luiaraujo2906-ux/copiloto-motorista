@@ -52,7 +52,7 @@ normalizado evita publicar novamente uma tela sem mudanças.
 
 - O serviço coleta textos, descrições, classe e ID de recurso em
   `AccessibilityNodeInfo`, limitando a leitura a 500 nós por análise.
-- O allowlist inicial contém apenas `com.taxis99.driver`. Para incluir ou
+- O allowlist inicial contém apenas `com.app99.driver` (99 Motorista). Para incluir ou
   substituir um app da 99, edite `TargetAppPackages.packages` com o ID exato do
   pacote Android e recompile. Pacotes fora da lista não iniciam captura nem OCR
   e não geram eventos para a interface.

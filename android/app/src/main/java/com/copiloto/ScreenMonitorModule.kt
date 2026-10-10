@@ -98,6 +98,12 @@ class ScreenMonitorModule(
         Arguments.createMap().apply {
           putBoolean("accessibilityEnabled", accessibilityEnabled)
           putBoolean("monitoring", ScreenMonitorSettings.isMonitoring(appContext))
+          putArray(
+            "targetPackages",
+            Arguments.createArray().apply {
+              TargetAppPackages.packages.forEach(::pushString)
+            },
+          )
         },
       )
     } catch (error: Exception) {

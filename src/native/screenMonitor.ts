@@ -11,6 +11,7 @@ import {
 export type ScreenMonitorStatus = {
   accessibilityEnabled: boolean;
   monitoring: boolean;
+  targetPackages: string[];
 };
 
 interface ScreenMonitorNativeModule {
