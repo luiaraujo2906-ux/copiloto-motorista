@@ -37,21 +37,25 @@ No Windows, configure `JAVA_HOME` para apontar para um JDK 17+ e verifique
 2. Habilite **Copiloto - captura de tela** nas configurações do Android e volte
    ao aplicativo.
 3. Toque em **Iniciar captura**. O serviço só analisa telas enquanto essa opção
-   estiver ativa; nesse período, todos os aplicativos em primeiro plano
-   (exceto o próprio Copiloto) podem ser analisados. Use **Pausar captura** para
-   interromper.
-4. Abra o aplicativo desejado. A tela mais recente e os textos reconhecidos
-   aparecem no painel.
+   estiver ativa; somente os pacotes listados em
+   [`TargetAppPackages.kt`](./android/app/src/main/java/com/copiloto/TargetAppPackages.kt)
+   podem ser analisados. Use **Pausar captura** para interromper.
+4. Abra o 99 Motorista. A tela mais recente e os textos reconhecidos aparecem
+   no painel.
 
 O serviço ignora o próprio Copiloto, agrupa eventos relevantes com debounce de
-350 ms e descarta análises antigas quando uma nova tela fica disponível. Um
-fingerprint do conteúdo normalizado evita publicar novamente uma tela sem
-mudanças.
+350 ms e descarta análises antigas quando uma nova tela fica disponível ou
+quando outro pacote passa para primeiro plano. Um fingerprint do conteúdo
+normalizado evita publicar novamente uma tela sem mudanças.
 
 ## Captura e modelo de dados
 
 - O serviço coleta textos, descrições, classe e ID de recurso em
   `AccessibilityNodeInfo`, limitando a leitura a 500 nós por análise.
+- O allowlist inicial contém apenas `com.taxis99.driver`. Para incluir ou
+  substituir um app da 99, edite `TargetAppPackages.packages` com o ID exato do
+  pacote Android e recompile. Pacotes fora da lista não iniciam captura nem OCR
+  e não geram eventos para a interface.
 - No Android 11 ou superior, também solicita uma captura de tela e executa o
   reconhecedor de texto latino do ML Kit. Em versões anteriores, os dados de
   acessibilidade continuam disponíveis e o OCR é marcado como indisponível.

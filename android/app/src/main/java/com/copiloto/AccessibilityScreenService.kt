@@ -43,21 +43,21 @@ class AccessibilityScreenService : AccessibilityService() {
   }
 
   override fun onAccessibilityEvent(event: AccessibilityEvent?) {
-    if (!ScreenMonitorSettings.isMonitoring(this)) {
-      analysisSequence += 1
-      pendingAnalysis?.let(handler::removeCallbacks)
-      pendingAnalysis = null
-      lastFingerprint = null
-      return
-    }
-    if (event == null) return
-    val eventPackage = event.packageName?.toString() ?: return
-    if (eventPackage == packageName || !isRelevantEvent(event.eventType)) return
+    if (event == null || !isRelevantEvent(event.eventType)) return
 
     analysisSequence += 1
     val sequence = analysisSequence
-    val epoch = ScreenMonitorSettings.epoch(this)
     pendingAnalysis?.let(handler::removeCallbacks)
+    pendingAnalysis = null
+
+    if (!ScreenMonitorSettings.isMonitoring(this)) {
+      lastFingerprint = null
+      return
+    }
+    val eventPackage = event.packageName?.toString() ?: return
+    if (!TargetAppPackages.contains(eventPackage)) return
+
+    val epoch = ScreenMonitorSettings.epoch(this)
     pendingAnalysis = Runnable { analyze(sequence, epoch, eventPackage) }
     handler.postDelayed(pendingAnalysis!!, DEBOUNCE_MILLIS)
   }
@@ -80,7 +80,12 @@ class AccessibilityScreenService : AccessibilityService() {
 
     val root = rootInActiveWindow
     val foregroundPackage = root?.packageName?.toString()
-    if (root == null || foregroundPackage.isNullOrBlank() || foregroundPackage == packageName) {
+    if (
+      root == null ||
+      foregroundPackage.isNullOrBlank() ||
+      foregroundPackage != eventPackage ||
+      !TargetAppPackages.contains(foregroundPackage)
+    ) {
       return
     }
 
@@ -90,7 +95,7 @@ class AccessibilityScreenService : AccessibilityService() {
       .getDisplay(Display.DEFAULT_DISPLAY)
       ?.getRealMetrics(displayMetrics)
     val payload = ScreenPayload(
-      packageName = foregroundPackage.ifBlank { eventPackage },
+      packageName = foregroundPackage,
       capturedAt = System.currentTimeMillis(),
       accessibilityElements = accessibilityElements,
       screenWidth = displayMetrics.widthPixels,
@@ -153,7 +158,8 @@ class AccessibilityScreenService : AccessibilityService() {
           if (
             sequence != analysisSequence ||
             payload.monitoringEpoch != ScreenMonitorSettings.epoch(this@AccessibilityScreenService) ||
-            !ScreenMonitorSettings.isMonitoring(this@AccessibilityScreenService)
+            !ScreenMonitorSettings.isMonitoring(this@AccessibilityScreenService) ||
+            !isTargetForeground(payload.packageName)
           ) {
             screenshot.hardwareBuffer.close()
             return
@@ -233,7 +239,7 @@ class AccessibilityScreenService : AccessibilityService() {
       sequence != analysisSequence ||
       payload.monitoringEpoch != ScreenMonitorSettings.epoch(this) ||
       !ScreenMonitorSettings.isMonitoring(this) ||
-      payload.packageName == packageName
+      !isTargetForeground(payload.packageName)
     ) {
       return
     }
@@ -279,6 +285,10 @@ class AccessibilityScreenService : AccessibilityService() {
       .digest(content.toByteArray())
       .joinToString("") { "%02x".format(it) }
   }
+
+  private fun isTargetForeground(expectedPackage: String): Boolean =
+    TargetAppPackages.contains(expectedPackage) &&
+      rootInActiveWindow?.packageName?.toString() == expectedPackage
 
   override fun onInterrupt() = Unit
 
