@@ -59,7 +59,7 @@ class AccessibilityScreenService : AccessibilityService() {
 
     val epoch = ScreenMonitorSettings.epoch(this)
     pendingAnalysis = Runnable { analyze(sequence, epoch, eventPackage) }
-    handler.postDelayed(pendingAnalysis!!, DEBOUNCE_MILLIS)
+    handler.postDelayed(pendingAnalysis!!, SCREEN_SETTLE_DELAY_MILLIS)
   }
 
   private fun isRelevantEvent(eventType: Int): Boolean =
@@ -67,7 +67,9 @@ class AccessibilityScreenService : AccessibilityService() {
       eventType == AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED ||
       eventType == AccessibilityEvent.TYPE_VIEW_SCROLLED ||
       eventType == AccessibilityEvent.TYPE_VIEW_TEXT_CHANGED ||
-      eventType == AccessibilityEvent.TYPE_VIEW_CLICKED
+      eventType == AccessibilityEvent.TYPE_VIEW_CLICKED ||
+      eventType == AccessibilityEvent.TYPE_VIEW_FOCUSED ||
+      eventType == AccessibilityEvent.TYPE_VIEW_SELECTED
 
   private fun analyze(sequence: Long, epoch: Long, eventPackage: String) {
     if (
@@ -338,6 +340,6 @@ class AccessibilityScreenService : AccessibilityService() {
   private fun Rect.coordinateKey() = "$left,$top,$right,$bottom"
 
   companion object {
-    private const val DEBOUNCE_MILLIS = 350L
+    private const val SCREEN_SETTLE_DELAY_MILLIS = 800L
   }
 }

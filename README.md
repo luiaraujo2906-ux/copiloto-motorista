@@ -43,10 +43,13 @@ No Windows, configure `JAVA_HOME` para apontar para um JDK 17+ e verifique
 4. Abra o 99 Motorista. A tela mais recente e os textos reconhecidos aparecem
    no painel.
 
-O serviço ignora o próprio Copiloto, agrupa eventos relevantes com debounce de
-350 ms e descarta análises antigas quando uma nova tela fica disponível ou
-quando outro pacote passa para primeiro plano. Um fingerprint do conteúdo
-normalizado evita publicar novamente uma tela sem mudanças.
+O serviço reage a cliques, foco, seleção, rolagem e mudanças de conteúdo/texto.
+Cada novo evento relevante reinicia um debounce de 800 ms; a árvore de
+acessibilidade e o OCR só são lidos depois desse intervalo sem novas
+interações, dando tempo para a tela terminar de renderizar. Análises antigas são
+descartadas quando outra mudança chega ou outro pacote passa para primeiro
+plano. Um fingerprint do conteúdo normalizado evita publicar novamente uma
+tela sem mudanças.
 
 ## Captura e modelo de dados
 
