@@ -1,3 +1,5 @@
 <resources>
     <string name="app_name">Copiloto</string>
+    <string name="accessibility_service_label">Copiloto - captura de tela</string>
+    <string name="accessibility_service_description">Lê conteúdo visível para atualizar o painel quando o monitoramento for ativado no aplicativo.</string>
 </resources>
