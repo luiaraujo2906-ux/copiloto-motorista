@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Copiloto · Captura ao vivo</title>
+    <style>
+      :root {
+        color-scheme: light;
+        font-family: system-ui, sans-serif;
+        color: #172521;
+        background: #f3f6f5;
+      }
+      * { box-sizing: border-box; }
+      body { max-width: 900px; margin: 0 auto; padding: 20px; }
+      header { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+      h1 { margin: 0; font-size: 24px; }
+      #status { color: #66736e; font-size: 13px; }
+      #status::before { display: inline-block; width: 9px; height: 9px; margin-right: 7px; border-radius: 50%; background: #ce963c; content: ""; }
+      #status.connected::before { background: #16845f; }
+      #package { margin: 8px 0 20px; color: #66736e; font-size: 13px; }
+      #screen { padding: 18px; background: white; border: 1px solid #e2e9e5; border-radius: 12px; }
+      #screen h2 { margin: 0; overflow-wrap: anywhere; font-size: 16px; }
+      #meta, #empty { color: #66736e; font-size: 13px; }
+      #elements { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 250px), 1fr)); gap: 8px; margin-top: 16px; }
+      .element { padding: 12px; border: 1px solid #e2e9e5; border-radius: 8px; }
+      .source { color: #146b56; font-size: 11px; font-weight: 700; }
+      .source.ocr { color: #315d9a; }
+      .text { margin: 6px 0; overflow-wrap: anywhere; white-space: pre-wrap; }
+      .bounds { color: #66736e; font-size: 11px; }
+      @media (max-width: 520px) { body { padding: 16px; } h1 { font-size: 20px; } }
+    </style>
+  </head>
+  <body>
+    <header>
+      <h1>Captura ao vivo</h1>
+      <span id="status">Conectando</span>
+    </header>
+    <p id="package">Aguardando o app alvo…</p>
+    <main id="screen">
+      <p id="empty">Abra o app alvo com o monitoramento ativo.</p>
+      <div id="elements"></div>
+    </main>
+    <script>
+      const status = document.querySelector('#status');
+      const packageLabel = document.querySelector('#package');
+      const empty = document.querySelector('#empty');
+      const elements = document.querySelector('#elements');
+      const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
+      const socket = new WebSocket(`${protocol}//${location.host}/ws`);
+
+      function show(observation) {
+        packageLabel.textContent = `${observation.packageName} · ${new Date(observation.capturedAt).toLocaleTimeString()}`;
+        empty.hidden = observation.elements.length > 0;
+        empty.textContent = observation.elements.length
+          ? ''
+          : observation.ocrStatus === 'failed'
+            ? `Nenhum texto capturado. OCR: ${observation.ocrError ?? 'falhou'}.`
+            : 'Nenhum texto nesta tela.';
+        elements.replaceChildren();
+
+        for (const item of observation.elements.slice(0, 100)) {
+          const card = document.createElement('article');
+          card.className = 'element';
+          const source = document.createElement('span');
+          source.className = `source${item.source === 'ocr' ? ' ocr' : ''}`;
+          source.textContent = item.source === 'ocr' ? 'ML Kit OCR' : 'Acessibilidade';
+          const text = document.createElement('p');
+          text.className = 'text';
+          text.textContent = item.text;
+          const bounds = document.createElement('small');
+          bounds.className = 'bounds';
+          bounds.textContent = `${item.bounds.left}, ${item.bounds.top} – ${item.bounds.right}, ${item.bounds.bottom}`;
+          card.append(source, text, bounds);
+          elements.append(card);
+        }
+      }
+
+      socket.addEventListener('open', () => {
+        status.textContent = 'Conectado';
+        status.classList.add('connected');
+      });
+      socket.addEventListener('close', () => {
+        status.textContent = 'Desconectado';
+        status.classList.remove('connected');
+      });
+      socket.addEventListener('error', () => {
+        status.textContent = 'Falha na conexão';
+        status.classList.remove('connected');
+      });
+      socket.addEventListener('message', event => {
+        let message;
+        try {
+          message = JSON.parse(event.data);
+        } catch {
+          status.textContent = 'Dados inválidos';
+          return;
+        }
+
+        if (message.type === 'snapshot') {
+          packageLabel.textContent = `Apps: ${message.targetPackages.join(', ')}`;
+          const latest = message.observations.at(-1);
+          if (latest) show(latest);
+        } else if (message.type === 'screenData') {
+          show(message.data);
+        }
+      });
+    </script>
+  </body>
+</html>

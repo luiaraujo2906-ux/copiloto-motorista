@@ -67,7 +67,42 @@ normalizado evita publicar novamente uma tela sem mudanças.
   liga por `duplicateGroupId` e marca textos divergentes com `textConflict`,
   sem substituir um valor pelo outro.
 - Os resultados são enviados ao React Native pelo evento nativo `screenData`.
-  Nenhuma imagem ou texto é persistido ou enviado pela rede pelo aplicativo.
+  O app não persiste capturas; por padrão, o texto permanece no dispositivo.
+  Quando o painel WebSocket é configurado e conectado, o texto reconhecido é
+  transmitido ao servidor indicado.
+
+## Painel web em tempo real
+
+O servidor WebSocket e a página HTML ficam isolados em [`monitor-server/`](./monitor-server/).
+O painel conecta automaticamente ao servidor e exibe a última tela do pacote
+alvo. Não há token, cadastro ou configuração de conexão na página.
+
+Inicie o servidor:
+
+```powershell
+cd monitor-server
+npm install
+npm start
+```
+
+Abra `http://localhost:8080` no navegador. No emulador Android padrão,
+`ws://10.0.2.2:8080/ws` já aponta para o computador. Em um telefone, troque
+`10.0.2.2` pela URL local do computador em
+[`monitorServer.ts`](./src/config/monitorServer.ts) e recompile o app. Inicie a
+captura e navegue no 99 Motorista para acompanhar os textos e suas origens ao
+vivo.
+
+O servidor aceita apenas pacotes configurados em `COPILOTO_TARGET_PACKAGES`
+(padrão `com.app99.driver`) e mantém a última tela somente em memória. Não há
+autenticação nem criptografia: use apenas em uma rede confiável e não exponha a
+porta à internet.
+
+Para testar o servidor:
+
+```powershell
+cd monitor-server
+npm test
+```
 
 ## Validação
 

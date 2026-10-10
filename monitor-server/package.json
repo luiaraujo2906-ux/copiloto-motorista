@@ -1,0 +1,17 @@
+{
+  "name": "copiloto-monitor-server",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Local WebSocket dashboard for Copiloto screen observations",
+  "type": "module",
+  "scripts": {
+    "start": "node server.js",
+    "test": "node --test"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "ws": "^8.18.3"
+  }
+}

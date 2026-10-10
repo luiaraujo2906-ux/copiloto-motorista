@@ -1,4 +1,4 @@
-import React, {useCallback, useEffect, useState} from 'react';
+import React, {useCallback, useEffect, useRef, useState} from 'react';
 import {
   AppState,
   AppStateStatus,
@@ -12,6 +12,10 @@ import {
 } from 'react-native';
 import {SafeAreaView} from 'react-native-safe-area-context';
 import {screenMonitor, ScreenMonitorStatus} from './src/native/screenMonitor';
+import {
+  connectMonitorStream,
+  MonitorStreamState,
+} from './src/native/monitorStream';
 import {
   NormalizedScreen,
   ScreenElement,
@@ -32,7 +36,12 @@ function App() {
   const [status, setStatus] = useState<ScreenMonitorStatus | null>(null);
   const [statusError, setStatusError] = useState<string | null>(null);
   const [screen, setScreen] = useState<NormalizedScreen | null>(null);
+  const latestScreenRef = useRef<NormalizedScreen | null>(null);
   const [busy, setBusy] = useState(false);
+  const [streamState, setStreamState] = useState<{
+    state: MonitorStreamState;
+    message?: string;
+  }>({state: 'disabled'});
 
   const refreshStatus = useCallback(async () => {
     try {
@@ -49,8 +58,18 @@ function App() {
       return;
     }
 
+    let stream: ReturnType<typeof connectMonitorStream> | null = null;
+    stream = connectMonitorStream((state, message) => {
+      setStreamState({state, message});
+      if (state === 'connected' && latestScreenRef.current) {
+        stream?.publish(latestScreenRef.current);
+      }
+    });
     const unsubscribe = screenMonitor.subscribe((observation: ScreenObservation) => {
-      setScreen(normalizeScreen(observation));
+      const normalized = normalizeScreen(observation);
+      latestScreenRef.current = normalized;
+      setScreen(normalized);
+      stream?.publish(normalized);
     });
     refreshStatus();
 
@@ -66,6 +85,7 @@ function App() {
     return () => {
       unsubscribe();
       appStateSubscription.remove();
+      stream.close();
     };
   }, [refreshStatus]);
 
@@ -157,8 +177,10 @@ function App() {
                 />
               )}
               <Text style={styles.privacyNote}>
-                A captura só começa após sua ativação. Os dados são processados
-                no dispositivo e não são enviados nem armazenados pelo app.
+                A captura só começa após sua ativação. O OCR é processado no
+                dispositivo; com o painel WebSocket conectado, o texto
+                reconhecido é transmitido ao servidor configurado. O app não
+                persiste capturas.
               </Text>
               {status?.targetPackages.length ? (
                 <Text style={styles.mutedText}>
@@ -172,6 +194,28 @@ function App() {
                 <Text style={styles.errorText}>{statusError}</Text>
               </View>
             ) : null}
+
+            <View style={styles.streamStatus}>
+              <View
+                style={[
+                  styles.statusDot,
+                  streamState.state === 'connected'
+                    ? styles.statusDotActive
+                    : styles.statusDotInactive,
+                ]}
+              />
+              <View style={styles.streamStatusCopy}>
+                <Text style={styles.streamStatusTitle}>
+                  Painel WebSocket: {getStreamStateLabel(streamState.state)}
+                </Text>
+                <Text style={styles.mutedText}>
+                  {streamState.message ??
+                    (streamState.state === 'disabled'
+                      ? 'Configure a URL em src/config/monitorServer.ts.'
+                      : 'As telas capturadas também serão enviadas ao painel web.')}
+                </Text>
+              </View>
+            </View>
 
             <View style={styles.sectionHeader}>
               <Text style={styles.sectionTitle}>Tela mais recente</Text>
@@ -197,6 +241,21 @@ function App() {
       </ScrollView>
     </SafeAreaView>
   );
+}
+
+function getStreamStateLabel(state: MonitorStreamState) {
+  switch (state) {
+    case 'connected':
+      return 'conectado';
+    case 'connecting':
+      return 'conectando';
+    case 'disconnected':
+      return 'desconectado; tentando reconectar';
+    case 'error':
+      return 'erro de conexão';
+    case 'disabled':
+      return 'não configurado';
+  }
 }
 
 function ActionButton({
@@ -404,6 +463,25 @@ const styles = StyleSheet.create({
     fontSize: 12,
     lineHeight: 18,
     marginTop: 14,
+  },
+  streamStatus: {
+    alignItems: 'flex-start',
+    backgroundColor: '#FFFFFF',
+    borderColor: colors.border,
+    borderRadius: 12,
+    borderWidth: 1,
+    flexDirection: 'row',
+    gap: 10,
+    marginBottom: 18,
+    padding: 14,
+  },
+  streamStatusCopy: {
+    flex: 1,
+  },
+  streamStatusTitle: {
+    color: colors.ink,
+    fontSize: 13,
+    fontWeight: '700',
   },
   sectionHeader: {
     alignItems: 'baseline',
