@@ -1,97 +1,74 @@
-This is a new [**React Native**](https://reactnative.dev) project, bootstrapped using [`@react-native-community/cli`](https://github.com/react-native-community/cli).
+# Copiloto
 
-# Getting Started
+Aplicativo Android em React Native e TypeScript que observa mudanças relevantes
+na tela, combina a árvore de acessibilidade com OCR do Google ML Kit e exibe os
+resultados em tempo real. O processamento é local e só começa quando o usuário
+ativa o monitoramento.
 
-> **Note**: Make sure you have completed the [Set Up Your Environment](https://reactnative.dev/docs/set-up-your-environment) guide before proceeding.
+## Requisitos
 
-## Step 1: Start Metro
+- Node.js 22.11 ou superior e npm.
+- JDK 17 ou superior.
+- Android Studio com Android SDK Platform 37, Build Tools 37 e um emulador ou
+  dispositivo Android.
 
-First, you will need to run **Metro**, the JavaScript build tool for React Native.
+O template também inclui o projeto iOS do React Native, mas a captura de tela
+depende do serviço de acessibilidade do Android e não está disponível no iOS.
 
-To start the Metro dev server, run the following command from the root of your React Native project:
+## Instalação e execução
 
 ```sh
-# Using npm
+npm install
 npm start
-
-# OR using Yarn
-yarn start
 ```
 
-## Step 2: Build and run your app
-
-With Metro running, open a new terminal window/pane from the root of your React Native project, and use one of the following commands to build and run your Android or iOS app:
-
-### Android
+Em outro terminal, com um dispositivo ou emulador conectado:
 
 ```sh
-# Using npm
 npm run android
-
-# OR using Yarn
-yarn android
 ```
 
-### iOS
+No Windows, configure `JAVA_HOME` para apontar para um JDK 17+ e verifique
+`ANDROID_HOME` antes de executar o Gradle.
 
-For iOS, remember to install CocoaPods dependencies (this only needs to be run on first clone or after updating native deps).
+## Ativar a captura
 
-The first time you create a new project, run the Ruby bundler to install CocoaPods itself:
+1. Abra o Copiloto e toque em **Abrir configurações de acessibilidade**.
+2. Habilite **Copiloto - captura de tela** nas configurações do Android e volte
+   ao aplicativo.
+3. Toque em **Iniciar captura**. O serviço só analisa telas enquanto essa opção
+   estiver ativa; nesse período, todos os aplicativos em primeiro plano
+   (exceto o próprio Copiloto) podem ser analisados. Use **Pausar captura** para
+   interromper.
+4. Abra o aplicativo desejado. A tela mais recente e os textos reconhecidos
+   aparecem no painel.
+
+O serviço ignora o próprio Copiloto, agrupa eventos relevantes com debounce de
+350 ms e descarta análises antigas quando uma nova tela fica disponível. Um
+fingerprint do conteúdo normalizado evita publicar novamente uma tela sem
+mudanças.
+
+## Captura e modelo de dados
+
+- O serviço coleta textos, descrições, classe e ID de recurso em
+  `AccessibilityNodeInfo`, limitando a leitura a 500 nós por análise.
+- No Android 11 ou superior, também solicita uma captura de tela e executa o
+  reconhecedor de texto latino do ML Kit. Em versões anteriores, os dados de
+  acessibilidade continuam disponíveis e o OCR é marcado como indisponível.
+- Falhas de captura/OCR são reportadas no evento; não descartam dados que já
+  vieram da acessibilidade.
+- `ScreenElement` preserva `source` (`accessibility` ou `ocr`), limites em
+  pixels absolutos da tela, confiança do OCR e metadados opcionais.
+- Observações de fontes diferentes na mesma região são mantidas. O modelo as
+  liga por `duplicateGroupId` e marca textos divergentes com `textConflict`,
+  sem substituir um valor pelo outro.
+- Os resultados são enviados ao React Native pelo evento nativo `screenData`.
+  Nenhuma imagem ou texto é persistido ou enviado pela rede pelo aplicativo.
+
+## Validação
 
 ```sh
-bundle install
+npm test -- --runInBand
+npm run lint
+npx tsc --noEmit
 ```
-
-Then, and every time you update your native dependencies, run:
-
-```sh
-bundle exec pod install
-```
-
-For more information, please visit [CocoaPods Getting Started guide](https://guides.cocoapods.org/using/getting-started.html).
-
-```sh
-# Using npm
-npm run ios
-
-# OR using Yarn
-yarn ios
-```
-
-If everything is set up correctly, you should see your new app running in the Android Emulator, iOS Simulator, or your connected device.
-
-This is one way to run your app — you can also build it directly from Android Studio or Xcode.
-
-## Step 3: Modify your app
-
-Now that you have successfully run the app, let's make changes!
-
-Open `App.tsx` in your text editor of choice and make some changes. When you save, your app will automatically update and reflect these changes — this is powered by [Fast Refresh](https://reactnative.dev/docs/fast-refresh).
-
-When you want to forcefully reload, for example to reset the state of your app, you can perform a full reload:
-
-- **Android**: Press the <kbd>R</kbd> key twice or select **"Reload"** from the **Dev Menu**, accessed via <kbd>Ctrl</kbd> + <kbd>M</kbd> (Windows/Linux) or <kbd>Cmd ⌘</kbd> + <kbd>M</kbd> (macOS).
-- **iOS**: Press <kbd>R</kbd> in iOS Simulator.
-
-## Congratulations! :tada:
-
-You've successfully run and modified your React Native App. :partying_face:
-
-### Now what?
-
-- If you want to add this new React Native code to an existing application, check out the [Integration guide](https://reactnative.dev/docs/integration-with-existing-apps).
-- If you're curious to learn more about React Native, check out the [docs](https://reactnative.dev/docs/getting-started).
-
-# Troubleshooting
-
-If you're having issues getting the above steps to work, see the [Troubleshooting](https://reactnative.dev/docs/troubleshooting) page.
-
-# Learn More
-
-To learn more about React Native, take a look at the following resources:
-
-- [React Native Website](https://reactnative.dev) - learn more about React Native.
-- [Getting Started](https://reactnative.dev/docs/environment-setup) - an **overview** of React Native and how setup your environment.
-- [Learn the Basics](https://reactnative.dev/docs/getting-started) - a **guided tour** of the React Native **basics**.
-- [Blog](https://reactnative.dev/blog) - read the latest official React Native **Blog** posts.
-- [`@facebook/react-native`](https://github.com/facebook/react-native) - the Open Source; GitHub **repository** for React Native.
