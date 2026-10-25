@@ -20,7 +20,11 @@ function isScreenObservation(value, allowedPackages) {
     !Number.isFinite(value.screenHeight) ||
     !Array.isArray(value.elements) ||
     value.elements.length > 500 ||
-    !['complete', 'unavailable', 'failed'].includes(value.ocrStatus)
+    !['complete', 'unavailable', 'failed'].includes(value.ocrStatus) ||
+    (
+      value.screenDetection !== undefined &&
+      !isScreenDetection(value.screenDetection)
+    )
   ) {
     return false;
   }
@@ -37,6 +41,32 @@ function isScreenObservation(value, allowedPackages) {
       edge => typeof element.bounds[edge] === 'number' &&
         Number.isFinite(element.bounds[edge]),
     ),
+  );
+}
+
+function isScreenDetection(value) {
+  if (value === null) return true;
+  if (
+    typeof value !== 'object' ||
+    typeof value.id !== 'string' ||
+    value.id.length > 100 ||
+    typeof value.name !== 'string' ||
+    value.name.length > 200 ||
+    typeof value.providerId !== 'string' ||
+    value.providerId.length > 100 ||
+    typeof value.extractedData !== 'object' ||
+    value.extractedData === null ||
+    Array.isArray(value.extractedData)
+  ) {
+    return false;
+  }
+
+  const fields = Object.entries(value.extractedData);
+  return fields.length <= 20 && fields.every(([name, values]) =>
+    name.length <= 100 &&
+    Array.isArray(values) &&
+    values.length <= 20 &&
+    values.every(text => typeof text === 'string' && text.length <= 4_000),
   );
 }
 

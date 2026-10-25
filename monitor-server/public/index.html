@@ -21,6 +21,9 @@
       #package { margin: 8px 0 20px; color: #66736e; font-size: 13px; }
       #screen { padding: 18px; background: white; border: 1px solid #e2e9e5; border-radius: 12px; }
       #screen h2 { margin: 0; overflow-wrap: anywhere; font-size: 16px; }
+      #detected-screen { margin: 12px 0 0; padding: 10px 12px; color: #146b56; background: #e8f3ee; border-radius: 8px; font-size: 13px; font-weight: 600; }
+      #extracted-values { margin: 8px 0 0; padding: 0; list-style: none; font-size: 14px; font-weight: 600; }
+      #extracted-values li { margin-top: 6px; }
       #meta, #empty { color: #66736e; font-size: 13px; }
       #elements { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 250px), 1fr)); gap: 8px; margin-top: 16px; }
       .element { padding: 12px; border: 1px solid #e2e9e5; border-radius: 8px; }
@@ -39,18 +42,34 @@
     <p id="package">Aguardando o app alvo…</p>
     <main id="screen">
       <p id="empty">Abra o app alvo com o monitoramento ativo.</p>
+      <p id="detected-screen" aria-live="polite" hidden></p>
+      <ul id="extracted-values"></ul>
       <div id="elements"></div>
     </main>
     <script>
       const status = document.querySelector('#status');
       const packageLabel = document.querySelector('#package');
       const empty = document.querySelector('#empty');
+      const detectedScreen = document.querySelector('#detected-screen');
+      const extractedValues = document.querySelector('#extracted-values');
       const elements = document.querySelector('#elements');
       const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
       const socket = new WebSocket(`${protocol}//${location.host}/ws`);
 
       function show(observation) {
         packageLabel.textContent = `${observation.packageName} · ${new Date(observation.capturedAt).toLocaleTimeString()}`;
+        detectedScreen.hidden = false;
+        detectedScreen.textContent = observation.screenDetection
+          ? `Tela identificada: ${observation.screenDetection.name} · provider ${observation.screenDetection.providerId}`
+          : 'Nenhuma tela conhecida identificada.';
+        extractedValues.replaceChildren();
+        for (const [field, values] of Object.entries(
+          observation.screenDetection?.extractedData ?? {},
+        )) {
+          const item = document.createElement('li');
+          item.textContent = `${field === 'rideValue' ? 'Valor da corrida' : field}: ${values.join(', ')}`;
+          extractedValues.append(item);
+        }
         empty.hidden = observation.elements.length > 0;
         empty.textContent = observation.elements.length
           ? ''

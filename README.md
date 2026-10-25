@@ -40,8 +40,8 @@ No Windows, configure `JAVA_HOME` para apontar para um JDK 17+ e verifique
    estiver ativa; somente os pacotes listados em
    [`TargetAppPackages.kt`](./android/app/src/main/java/com/copiloto/TargetAppPackages.kt)
    podem ser analisados. Use **Pausar captura** para interromper.
-4. Abra o 99 Motorista. A tela mais recente e os textos reconhecidos aparecem
-   no painel.
+4. Abra um dos apps listados como alvo. A tela mais recente e os textos
+   reconhecidos aparecem no painel.
 
 O serviço reage a cliques, foco, seleção, rolagem e mudanças de conteúdo/texto.
 Cada novo evento relevante reinicia um debounce de 800 ms; a árvore de
@@ -55,9 +55,10 @@ tela sem mudanças.
 
 - O serviço coleta textos, descrições, classe e ID de recurso em
   `AccessibilityNodeInfo`, limitando a leitura a 500 nós por análise.
-- O allowlist inicial contém apenas `com.app99.driver` (99 Motorista). Para incluir ou
-  substituir um app da 99, edite `TargetAppPackages.packages` com o ID exato do
-  pacote Android e recompile. Pacotes fora da lista não iniciam captura nem OCR
+- O allowlist nativo fica em `TargetAppPackages.packages`; atualmente inclui
+  `com.app99.driver` (99 Motorista) e `com.sec.android.gallery3d` (Samsung
+  Galeria). Para incluir outro app, adicione o ID exato do pacote Android e
+  recompile/reinstale o app. Pacotes fora da lista não iniciam captura nem OCR
   e não geram eventos para a interface.
 - No Android 11 ou superior, também solicita uma captura de tela e executa o
   reconhecedor de texto latino do ML Kit. Em versões anteriores, os dados de
@@ -73,6 +74,19 @@ tela sem mudanças.
   O app não persiste capturas; por padrão, o texto permanece no dispositivo.
   Quando o painel WebSocket é configurado e conectado, o texto reconhecido é
   transmitido ao servidor indicado.
+- As telas conhecidas ficam centralizadas em
+  [`screenRegistry.ts`](./src/screen/screenRegistry.ts), com regras de texto
+  para identificação e campos predefinidos para extração, sem depender de
+  bounds/posição na tela. Os textos que identificam a tela não são considerados valores
+  extraídos. O provider `ride-completion` extrai somente o valor monetário
+  (`rideValue`) a partir do formato monetário reconhecido. O provider
+  `ride-offer` extrai categoria, valor da corrida,
+  tempo e distância até o embarque e tempo e distância até o destino, cada qual
+  a partir dos padrões de texto definidos.
+  A identificação roda somente quando chega uma observação alterada; o debounce
+  e o fingerprint do serviço Android evitam polling ou reprocessamento de telas
+  sem mudanças. A tela identificada e o provider aparecem no app e no painel
+  web.
 
 ## Painel web em tempo real
 
@@ -92,13 +106,21 @@ Abra `http://localhost:8080` no navegador. No emulador Android padrão,
 `ws://10.0.2.2:8080/ws` já aponta para o computador. Em um telefone, troque
 `10.0.2.2` pela URL local do computador em
 [`monitorServer.ts`](./src/config/monitorServer.ts) e recompile o app. Inicie a
-captura e navegue no 99 Motorista para acompanhar os textos e suas origens ao
-vivo.
+captura e navegue em um dos apps-alvo para acompanhar os textos e suas origens
+ao vivo.
 
 O servidor aceita apenas pacotes configurados em `COPILOTO_TARGET_PACKAGES`
-(padrão `com.app99.driver`) e mantém a última tela somente em memória. Não há
-autenticação nem criptografia: use apenas em uma rede confiável e não exponha a
-porta à internet.
+(padrão `com.app99.driver`) e mantém a última tela somente em memória. Para
+acompanhar também a Samsung Galeria no painel, configure a lista antes de
+iniciar o servidor:
+
+```powershell
+$env:COPILOTO_TARGET_PACKAGES = "com.app99.driver,com.sec.android.gallery3d"
+npm start
+```
+
+Essa configuração vale para o terminal atual. Não há autenticação nem
+criptografia: use apenas em uma rede confiável e não exponha a porta à internet.
 
 Para testar o servidor:
 

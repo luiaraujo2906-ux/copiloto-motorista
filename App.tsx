@@ -22,6 +22,11 @@ import {
   ScreenObservation,
   normalizeScreen,
 } from './src/screen/screenModel';
+import {identifyScreen, ScreenDetection} from './src/screen/screenRegistry';
+
+type IdentifiedScreen = NormalizedScreen & {
+  screenDetection: ScreenDetection | null;
+};
 
 const sourceLabels = {
   accessibility: 'Acessibilidade',
@@ -35,8 +40,8 @@ function getErrorMessage(error: unknown) {
 function App() {
   const [status, setStatus] = useState<ScreenMonitorStatus | null>(null);
   const [statusError, setStatusError] = useState<string | null>(null);
-  const [screen, setScreen] = useState<NormalizedScreen | null>(null);
-  const latestScreenRef = useRef<NormalizedScreen | null>(null);
+  const [screen, setScreen] = useState<IdentifiedScreen | null>(null);
+  const latestScreenRef = useRef<IdentifiedScreen | null>(null);
   const [busy, setBusy] = useState(false);
   const [streamState, setStreamState] = useState<{
     state: MonitorStreamState;
@@ -67,9 +72,13 @@ function App() {
     });
     const unsubscribe = screenMonitor.subscribe((observation: ScreenObservation) => {
       const normalized = normalizeScreen(observation);
-      latestScreenRef.current = normalized;
-      setScreen(normalized);
-      stream?.publish(normalized);
+      const identified: IdentifiedScreen = {
+        ...normalized,
+        screenDetection: identifyScreen(normalized),
+      };
+      latestScreenRef.current = identified;
+      setScreen(identified);
+      stream?.publish(identified);
     });
     refreshStatus();
 
@@ -288,7 +297,7 @@ function ActionButton({
   );
 }
 
-function ScreenCard({screen}: {screen: NormalizedScreen}) {
+function ScreenCard({screen}: {screen: IdentifiedScreen}) {
   const elements = screen.elements.slice(0, 50);
 
   return (
@@ -298,6 +307,21 @@ function ScreenCard({screen}: {screen: NormalizedScreen}) {
         {screen.screenWidth} × {screen.screenHeight} px ·{' '}
         {screen.elements.length} elementos
       </Text>
+      <Text style={styles.screenDetection}>
+        {screen.screenDetection
+          ? `Tela identificada: ${screen.screenDetection.name} · provider ${screen.screenDetection.providerId}`
+          : 'Nenhuma tela conhecida identificada.'}
+      </Text>
+      {screen.screenDetection
+        ? Object.entries(screen.screenDetection.extractedData).map(
+            ([field, values]) => (
+              <Text key={field} style={styles.extractedValue}>
+                {field === 'rideValue' ? 'Valor da corrida' : field}:{' '}
+                {values.join(', ')}
+              </Text>
+            ),
+          )
+        : null}
 
       {screen.ocrStatus === 'failed' ? (
         <Text style={styles.errorText}>
@@ -500,6 +524,21 @@ const styles = StyleSheet.create({
     fontSize: 12,
     lineHeight: 18,
     marginTop: 4,
+  },
+  screenDetection: {
+    backgroundColor: '#E8F3EE',
+    borderRadius: 8,
+    color: colors.accent,
+    fontSize: 13,
+    fontWeight: '600',
+    marginTop: 12,
+    padding: 10,
+  },
+  extractedValue: {
+    color: colors.ink,
+    fontSize: 14,
+    fontWeight: '600',
+    marginTop: 8,
   },
   packageName: {
     color: colors.ink,

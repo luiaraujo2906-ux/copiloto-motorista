@@ -101,6 +101,33 @@ test('sends the most recent observation to a newly connected dashboard', async (
   dashboard.close();
 });
 
+test('streams the detected screen and provider to the dashboard', async () => {
+  const {wsUrl} = await startServer();
+  const {socket: appSocket} = await connect(wsUrl);
+  const {socket: dashboardSocket} = await connect(wsUrl);
+  const screenDetection = {
+    id: 'ride-completion',
+    name: 'Encerramento da corrida',
+    providerId: 'ride-completion',
+    extractedData: {
+      rideValue: ['R$9,40'],
+    },
+  };
+  const update = nextMessage(
+    dashboardSocket,
+    message => message.type === 'screenData',
+  );
+
+  appSocket.send(JSON.stringify({
+    type: 'screenData',
+    data: {...observation, screenDetection},
+  }));
+
+  assert.deepEqual((await update).data.screenDetection, screenDetection);
+  appSocket.close();
+  dashboardSocket.close();
+});
+
 test('rejects observations for packages outside the allowlist', async () => {
   const {wsUrl} = await startServer();
   const {socket} = await connect(wsUrl);

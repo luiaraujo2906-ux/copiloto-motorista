@@ -1,3 +1,3 @@
 export const monitorServerConfig = {
-  url: 'ws://10.0.2.2:8080/ws',
+  url: 'ws://192.168.1.158:8080/ws',
 };
