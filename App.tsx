@@ -23,6 +23,10 @@ import {
   normalizeScreen,
 } from './src/screen/screenModel';
 import {identifyScreen, ScreenDetection} from './src/screen/screenRegistry';
+import {
+  movementMonitor,
+  MovementStatus,
+} from './src/native/movementMonitor';
 
 type IdentifiedScreen = NormalizedScreen & {
   screenDetection: ScreenDetection | null;
@@ -43,6 +47,12 @@ function App() {
   const [screen, setScreen] = useState<IdentifiedScreen | null>(null);
   const latestScreenRef = useRef<IdentifiedScreen | null>(null);
   const [busy, setBusy] = useState(false);
+  const [movementBusy, setMovementBusy] = useState(false);
+  const [movementEnabled, setMovementEnabled] = useState(false);
+  const [movementStatus, setMovementStatus] = useState<MovementStatus>({
+    state: 'unknown',
+    source: 'none',
+  });
   const [streamState, setStreamState] = useState<{
     state: MonitorStreamState;
     message?: string;
@@ -56,6 +66,11 @@ function App() {
     } catch (error) {
       setStatusError(getErrorMessage(error));
     }
+  }, []);
+
+  useEffect(() => {
+    const unsubscribeMovement = movementMonitor.subscribe(setMovementStatus);
+    return unsubscribeMovement;
   }, []);
 
   useEffect(() => {
@@ -125,6 +140,23 @@ function App() {
     }
   };
 
+  const toggleMovementDetection = async () => {
+    setMovementBusy(true);
+    try {
+      if (movementEnabled) {
+        await movementMonitor.stop();
+        setMovementEnabled(false);
+      } else {
+        await movementMonitor.start();
+        setMovementEnabled(true);
+      }
+    } catch (error) {
+      setStatusError(getErrorMessage(error));
+    } finally {
+      setMovementBusy(false);
+    }
+  };
+
   const accessibilityEnabled = status?.accessibilityEnabled ?? false;
   const monitoring = status?.monitoring ?? false;
 
@@ -139,6 +171,60 @@ function App() {
             Acompanhe informações visíveis dos aplicativos em primeiro plano.
           </Text>
         </View>
+
+        {movementMonitor.isAvailable ? (
+          <View style={styles.card}>
+            <View style={styles.statusRow}>
+              <View
+                style={[
+                  styles.statusDot,
+                  movementStatus.state === 'moving'
+                    ? styles.statusDotActive
+                    : movementStatus.state === 'stopped'
+                      ? styles.movementStoppedDot
+                      : styles.statusDotInactive,
+                ]}
+              />
+              <Text style={styles.cardTitle}>
+                {movementStatus.state === 'moving'
+                ? 'Em movimento'
+                  : movementStatus.state === 'stopped'
+                  ? 'Parado'
+                    : movementEnabled
+                      ? 'Detectando movimento'
+                      : 'Detecção de movimento pausada'}
+              </Text>
+            </View>
+            <Text style={styles.body}>
+              {movementEnabled
+                ? movementStatus.state === 'unknown'
+                  ? 'Aguardando dados dos sensores ou do GPS.'
+                  : `Identificação por ${
+                      movementStatus.source === 'gps'
+                        ? 'GPS'
+                        : 'sensor de movimento do Android'
+                    }.`
+                : 'Ative para identificar se o veículo está em movimento ou parado.'}
+            </Text>
+            {Platform.OS === 'android' && Number(Platform.Version) >= 29 ? (
+              <Text style={styles.privacyNote}>
+                O Android pode solicitar acesso à atividade física e à
+                localização. O GPS é usado como fallback quando o sensor não
+                fornece dados suficientes.
+              </Text>
+            ) : null}
+            <ActionButton
+              label={
+                movementEnabled
+                  ? 'Pausar detecção'
+                  : 'Iniciar detecção de movimento'
+              }
+              disabled={movementBusy}
+              onPress={toggleMovementDetection}
+              secondary={movementEnabled}
+            />
+          </View>
+        ) : null}
 
         {!screenMonitor.isAvailable || Platform.OS !== 'android' ? (
           <View style={styles.card}>
@@ -452,6 +538,9 @@ const styles = StyleSheet.create({
   },
   statusDotInactive: {
     backgroundColor: '#D69A37',
+  },
+  movementStoppedDot: {
+    backgroundColor: '#66736E',
   },
   button: {
     alignItems: 'center',

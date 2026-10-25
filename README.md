@@ -51,6 +51,14 @@ descartadas quando outra mudança chega ou outro pacote passa para primeiro
 plano. Um fingerprint do conteúdo normalizado evita publicar novamente uma
 tela sem mudanças.
 
+## Detecção de movimento
+
+Na tela inicial, **Iniciar detecção de movimento** habilita a identificação do
+estado sem exibir velocidade. O limiar está temporariamente em **1 km/h** para
+testar caminhando; para uso real, configure **20 km/h**. Detalhes do fluxo,
+recursos Android, filtragem, permissões, constantes e instruções de teste estão
+na [documentação do detector](./docs/MOVEMENT_DETECTOR.md).
+
 ## Captura e modelo de dados
 
 - O serviço coleta textos, descrições, classe e ID de recurso em
