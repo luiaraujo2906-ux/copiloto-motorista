@@ -18,6 +18,18 @@ interface ScreenMonitorNativeModule {
   getStatus(): Promise<ScreenMonitorStatus>;
   openAccessibilitySettings(): Promise<void>;
   setMonitoring(enabled: boolean): Promise<void>;
+  getFareRatePerKm(): Promise<number>;
+  setFareRatePerKm(rate: number): Promise<void>;
+  showFareSignal(
+    fare: string,
+    distance: string,
+    time: string,
+    rate: string,
+    suggestedFare: string,
+    classification: string,
+    backgroundColor: string,
+  ): Promise<void>;
+  hideFareSignal(): Promise<void>;
   addListener(eventName: string): void;
   removeListeners(count: number): void;
 }
@@ -93,6 +105,58 @@ export const screenMonitor = {
       );
     }
     return nativeModule.setMonitoring(enabled);
+  },
+
+  getFareRatePerKm(): Promise<number> {
+    if (!nativeModule) {
+      return Promise.reject(
+        new Error('Screen monitoring is available only in the Android app.'),
+      );
+    }
+    return nativeModule.getFareRatePerKm();
+  },
+
+  setFareRatePerKm(rate: number): Promise<void> {
+    if (!nativeModule) {
+      return Promise.reject(
+        new Error('Screen monitoring is available only in the Android app.'),
+      );
+    }
+    return nativeModule.setFareRatePerKm(rate);
+  },
+
+  showFareSignal(
+    fare: string,
+    distance: string,
+    time: string,
+    rate: string,
+    suggestedFare: string,
+    classification: string,
+    backgroundColor: string,
+  ): Promise<void> {
+    if (!nativeModule) {
+      return Promise.reject(
+        new Error('Screen monitoring is available only in the Android app.'),
+      );
+    }
+    return nativeModule.showFareSignal(
+      fare,
+      distance,
+      time,
+      rate,
+      suggestedFare,
+      classification,
+      backgroundColor,
+    );
+  },
+
+  hideFareSignal(): Promise<void> {
+    if (!nativeModule) {
+      return Promise.reject(
+        new Error('Screen monitoring is available only in the Android app.'),
+      );
+    }
+    return nativeModule.hideFareSignal();
   },
 
   subscribe(listener: (observation: ScreenObservation) => void) {

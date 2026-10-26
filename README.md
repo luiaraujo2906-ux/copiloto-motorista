@@ -100,6 +100,16 @@ não é persistida nem associada às telas reconhecidas.
   e o fingerprint do serviço Android evitam polling ou reprocessamento de telas
   sem mudanças. A tela identificada e o provider aparecem no app e no painel
   web.
+- Ao reconhecer uma oferta, o Android exibe por até dez segundos um farol
+  sobre outros apps: o valor da corrida dividido pela distância total
+  (embarque + destino), junto com distância e tempo totais. Abaixo de
+  R$ 1,30/km é ruim (vermelho), de R$ 1,30/km até menos de R$ 1,50/km é média
+  (amarelo) e a partir de R$ 1,50/km é boa (verde). O popup some antes se a
+  tela de oferta deixar de estar visível. A tarifa desejada do motorista é
+  ajustável na interface; o farol mostra o valor sugerido pela distância total
+  vezes essa tarifa. Consulte a
+  [documentação do farol](./docs/FARE_SIGNAL.md) para detalhes da implementação,
+  parâmetros ajustáveis e limitações conhecidas.
 
 ## Painel web em tempo real
 

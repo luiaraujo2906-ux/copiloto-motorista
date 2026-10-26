@@ -8,6 +8,7 @@ import {
   StatusBar,
   StyleSheet,
   Text,
+  TextInput,
   View,
 } from 'react-native';
 import {SafeAreaView} from 'react-native-safe-area-context';
@@ -23,6 +24,10 @@ import {
   normalizeScreen,
 } from './src/screen/screenModel';
 import {identifyScreen, ScreenDetection} from './src/screen/screenRegistry';
+import {
+  calculateFareSignal,
+  DEFAULT_DRIVER_RATE_PER_KM,
+} from './src/screen/fareSignal';
 import {
   odometer,
   OdometerStatus,
@@ -62,6 +67,16 @@ function App() {
   });
   const [odometerBusy, setOdometerBusy] = useState(false);
   const [odometerError, setOdometerError] = useState<string | null>(null);
+  const [driverRateInput, setDriverRateInput] = useState(
+    DEFAULT_DRIVER_RATE_PER_KM.toLocaleString('pt-BR', {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    }),
+  );
+  const [driverRateBusy, setDriverRateBusy] = useState(false);
+  const [driverRateReady, setDriverRateReady] = useState(false);
+  const [driverRateError, setDriverRateError] = useState<string | null>(null);
+  const driverRatePerKmRef = useRef(DEFAULT_DRIVER_RATE_PER_KM);
   const [streamState, setStreamState] = useState<{
     state: MonitorStreamState;
     message?: string;
@@ -104,11 +119,49 @@ function App() {
         ...normalized,
         screenDetection: identifyScreen(normalized),
       };
+      const fareSignal =
+        identified.screenDetection?.id === 'ride-offer'
+          ? calculateFareSignal(
+              identified.screenDetection.extractedData,
+              driverRatePerKmRef.current,
+            )
+          : null;
+      if (fareSignal) {
+        screenMonitor
+          .showFareSignal(
+            fareSignal.fareLabel,
+            fareSignal.distanceLabel,
+            fareSignal.timeLabel,
+            fareSignal.rateLabel,
+            fareSignal.suggestedFareLabel,
+            fareSignal.classification,
+            fareSignal.backgroundColor,
+          )
+          .catch(error => setStatusError(getErrorMessage(error)));
+      } else {
+        screenMonitor.hideFareSignal().catch(error =>
+          setStatusError(getErrorMessage(error)),
+        );
+      }
       latestScreenRef.current = identified;
       setScreen(identified);
       stream?.publish(identified);
     });
     refreshStatus();
+    screenMonitor
+      .getFareRatePerKm()
+      .then(rate => {
+        driverRatePerKmRef.current = rate;
+        setDriverRateInput(rate.toLocaleString('pt-BR', {
+          minimumFractionDigits: 2,
+          maximumFractionDigits: 2,
+        }));
+        setDriverRateReady(true);
+      })
+      .catch(error => {
+        setDriverRateError(getErrorMessage(error));
+        setDriverRateReady(true);
+      });
 
     const appStateSubscription = AppState.addEventListener(
       'change',
@@ -203,6 +256,59 @@ function App() {
       setOdometerError(getErrorMessage(error));
     } finally {
       setOdometerBusy(false);
+    }
+  };
+
+  const saveDriverRate = async () => {
+    const normalizedRate = driverRateInput.trim().replace(',', '.');
+    const rate = Number(normalizedRate);
+    if (
+      !/^\d+(?:[.,]\d{1,2})?$/.test(driverRateInput.trim()) ||
+      !Number.isFinite(rate) ||
+      rate <= 0 ||
+      rate > 1000
+    ) {
+      setDriverRateError('Informe uma tarifa maior que zero e até R$ 1.000,00/km.');
+      return;
+    }
+
+    setDriverRateBusy(true);
+    try {
+      await screenMonitor.setFareRatePerKm(rate);
+      driverRatePerKmRef.current = rate;
+      setDriverRateInput(
+        rate.toLocaleString('pt-BR', {
+          minimumFractionDigits: 2,
+          maximumFractionDigits: 2,
+        }),
+      );
+      setDriverRateError(null);
+
+      const latestScreen = latestScreenRef.current;
+      const extractedData =
+        latestScreen?.screenDetection?.id === 'ride-offer'
+          ? latestScreen.screenDetection.extractedData
+          : null;
+      const fareSignal = extractedData
+        ? calculateFareSignal(extractedData, rate)
+        : null;
+      if (fareSignal) {
+        screenMonitor
+          .showFareSignal(
+            fareSignal.fareLabel,
+            fareSignal.distanceLabel,
+            fareSignal.timeLabel,
+            fareSignal.rateLabel,
+            fareSignal.suggestedFareLabel,
+            fareSignal.classification,
+            fareSignal.backgroundColor,
+          )
+          .catch(error => setStatusError(getErrorMessage(error)));
+      }
+    } catch (error) {
+      setDriverRateError(getErrorMessage(error));
+    } finally {
+      setDriverRateBusy(false);
     }
   };
 
@@ -324,6 +430,38 @@ function App() {
           </View>
         ) : (
           <>
+            <View style={styles.card}>
+              <Text style={styles.cardTitle}>Tarifa por quilômetro</Text>
+              <Text style={styles.body}>
+                Define o valor sugerido no farol. Padrão: R$ 1,50 por km.
+              </Text>
+              <View style={styles.rateInputRow}>
+                <Text style={styles.ratePrefix}>R$</Text>
+                <TextInput
+                  accessibilityLabel="Tarifa desejada por quilômetro"
+                  editable={driverRateReady && !driverRateBusy}
+                  keyboardType="decimal-pad"
+                  onChangeText={setDriverRateInput}
+                  value={driverRateInput}
+                  style={styles.rateInput}
+                />
+                <Text style={styles.rateSuffix}>/km</Text>
+              </View>
+              {driverRateError ? (
+                <Text style={styles.errorText}>{driverRateError}</Text>
+              ) : null}
+              <ActionButton
+                label={
+                  !driverRateReady
+                    ? 'Carregando tarifa...'
+                    : driverRateBusy
+                      ? 'Salvando tarifa...'
+                      : 'Salvar tarifa'
+                }
+                disabled={driverRateBusy || !driverRateReady}
+                onPress={saveDriverRate}
+              />
+            </View>
             <View style={styles.card}>
               <View style={styles.statusRow}>
                 <View
@@ -611,6 +749,37 @@ const styles = StyleSheet.create({
     fontVariant: ['tabular-nums'],
     fontWeight: '700',
     marginTop: 10,
+  },
+  rateInputRow: {
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    backgroundColor: '#F3F6F5',
+    borderColor: colors.border,
+    borderRadius: 10,
+    borderWidth: 1,
+    flexDirection: 'row',
+    marginTop: 14,
+    minHeight: 48,
+    paddingHorizontal: 12,
+  },
+  ratePrefix: {
+    color: colors.muted,
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  rateInput: {
+    color: colors.ink,
+    fontSize: 18,
+    fontVariant: ['tabular-nums'],
+    fontWeight: '700',
+    minWidth: 90,
+    paddingHorizontal: 8,
+    paddingVertical: 8,
+    textAlign: 'right',
+  },
+  rateSuffix: {
+    color: colors.muted,
+    fontSize: 14,
   },
   body: {
     color: colors.muted,

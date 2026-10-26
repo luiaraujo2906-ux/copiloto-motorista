@@ -132,6 +132,9 @@ class ScreenMonitorModule(
   fun setMonitoring(enabled: Boolean, promise: Promise) {
     try {
       ScreenMonitorSettings.setMonitoring(appContext, enabled)
+      if (!enabled) {
+        AccessibilityScreenService.currentService?.hideFareSignal()
+      }
       promise.resolve(null)
     } catch (error: Exception) {
       promise.reject("E_SCREEN_MONITOR_TOGGLE", "Could not update monitoring", error)
@@ -139,8 +142,98 @@ class ScreenMonitorModule(
   }
 
   @ReactMethod
+  fun getFareRatePerKm(promise: Promise) {
+    try {
+      promise.resolve(
+        appContext
+          .getSharedPreferences(FARE_SIGNAL_PREFERENCES, Context.MODE_PRIVATE)
+          .getFloat(FARE_RATE_PER_KM, DEFAULT_FARE_RATE_PER_KM)
+          .toDouble(),
+      )
+    } catch (error: Exception) {
+      promise.reject("E_FARE_RATE_READ", "Could not read the fare rate", error)
+    }
+  }
+
+  @ReactMethod
+  fun setFareRatePerKm(rate: Double, promise: Promise) {
+    if (!rate.isFinite() || rate <= 0.0 || rate > MAX_FARE_RATE_PER_KM) {
+      promise.reject(
+        "E_FARE_RATE_INVALID",
+        "Fare rate must be greater than zero and at most $MAX_FARE_RATE_PER_KM R$/km",
+      )
+      return
+    }
+
+    try {
+      val saved = appContext
+        .getSharedPreferences(FARE_SIGNAL_PREFERENCES, Context.MODE_PRIVATE)
+        .edit()
+        .putFloat(FARE_RATE_PER_KM, rate.toFloat())
+        .commit()
+      if (!saved) {
+        promise.reject("E_FARE_RATE_WRITE", "Could not save the fare rate")
+      } else {
+        promise.resolve(null)
+      }
+    } catch (error: Exception) {
+      promise.reject("E_FARE_RATE_WRITE", "Could not save the fare rate", error)
+    }
+  }
+
+  @ReactMethod
+  fun showFareSignal(
+    fare: String,
+    distance: String,
+    time: String,
+    rate: String,
+    suggestedFare: String,
+    classification: String,
+    backgroundColor: String,
+    promise: Promise,
+  ) {
+    val service = AccessibilityScreenService.currentService
+    if (service == null) {
+      promise.reject(
+        "E_FARE_SIGNAL_SERVICE",
+        "The accessibility service is not connected; the fare signal cannot be shown.",
+      )
+      return
+    }
+
+    service.showFareSignal(
+      fare,
+      distance,
+      time,
+      rate,
+      suggestedFare,
+      classification,
+      backgroundColor,
+    ) { error ->
+      if (error == null) {
+        promise.resolve(null)
+      } else {
+        promise.reject("E_FARE_SIGNAL_OVERLAY", "Could not show the fare signal", error)
+      }
+    }
+  }
+
+  @ReactMethod
+  fun hideFareSignal(promise: Promise) {
+    AccessibilityScreenService.currentService?.hideFareSignal()
+    promise.resolve(null)
+  }
+
+  @ReactMethod
   fun addListener(eventName: String) = Unit
 
   @ReactMethod
   fun removeListeners(count: Double) = Unit
+
+  private companion object {
+    const val FARE_SIGNAL_PREFERENCES = "fare_signal"
+    const val FARE_RATE_PER_KM = "fare_rate_per_km"
+    const val DEFAULT_FARE_RATE_PER_KM = 1.5f
+    const val MAX_FARE_RATE_PER_KM = 1_000.0
+  }
 }
