@@ -24,6 +24,8 @@ import {
 } from './src/screen/screenModel';
 import {identifyScreen, ScreenDetection} from './src/screen/screenRegistry';
 import {
+  odometer,
+  OdometerStatus,
   movementMonitor,
   MovementStatus,
 } from './src/native/movementMonitor';
@@ -53,6 +55,13 @@ function App() {
     state: 'unknown',
     source: 'none',
   });
+  const [odometerStatus, setOdometerStatus] = useState<OdometerStatus>({
+    distanceMeters: 0,
+    running: false,
+    hasFix: false,
+  });
+  const [odometerBusy, setOdometerBusy] = useState(false);
+  const [odometerError, setOdometerError] = useState<string | null>(null);
   const [streamState, setStreamState] = useState<{
     state: MonitorStreamState;
     message?: string;
@@ -70,7 +79,11 @@ function App() {
 
   useEffect(() => {
     const unsubscribeMovement = movementMonitor.subscribe(setMovementStatus);
-    return unsubscribeMovement;
+    const unsubscribeOdometer = odometer.subscribe(setOdometerStatus);
+    return () => {
+      unsubscribeMovement();
+      unsubscribeOdometer();
+    };
   }, []);
 
   useEffect(() => {
@@ -157,6 +170,42 @@ function App() {
     }
   };
 
+  const startOdometer = async () => {
+    setOdometerBusy(true);
+    try {
+      await odometer.start();
+      setOdometerError(null);
+    } catch (error) {
+      setOdometerError(getErrorMessage(error));
+    } finally {
+      setOdometerBusy(false);
+    }
+  };
+
+  const stopOdometer = async () => {
+    setOdometerBusy(true);
+    try {
+      await odometer.stop();
+      setOdometerError(null);
+    } catch (error) {
+      setOdometerError(getErrorMessage(error));
+    } finally {
+      setOdometerBusy(false);
+    }
+  };
+
+  const clearOdometer = async () => {
+    setOdometerBusy(true);
+    try {
+      await odometer.clear();
+      setOdometerError(null);
+    } catch (error) {
+      setOdometerError(getErrorMessage(error));
+    } finally {
+      setOdometerBusy(false);
+    }
+  };
+
   const accessibilityEnabled = status?.accessibilityEnabled ?? false;
   const monitoring = status?.monitoring ?? false;
 
@@ -173,6 +222,44 @@ function App() {
         </View>
 
         {movementMonitor.isAvailable ? (
+          <>
+          <View style={styles.card}>
+            <Text style={styles.cardTitle}>Odômetro GPS</Text>
+            <Text style={styles.odometerDistance}>
+              {(odometerStatus.distanceMeters / 1000).toFixed(3)} km
+            </Text>
+            <Text style={styles.body}>
+              {odometerStatus.running
+                ? odometerStatus.hasFix
+                  ? 'GPS ativo; a distância é atualizada conforme o deslocamento confirmado.'
+                  : 'Buscando a primeira posição GPS. A medição começa quando o sinal estiver disponível.'
+                : 'Inicie para medir a distância percorrida durante uma corrida.'}
+            </Text>
+            <Text style={styles.privacyNote}>
+              Usa localização precisa; leituras imprecisas, saltos improváveis e
+              oscilações menores que a margem de ruído do GPS são descartados.
+            </Text>
+            {odometerError ? (
+              <Text style={styles.errorText}>{odometerError}</Text>
+            ) : null}
+            <ActionButton
+              label="Iniciar odômetro"
+              disabled={odometerBusy || odometerStatus.running}
+              onPress={startOdometer}
+            />
+            <ActionButton
+              label="Parar odômetro"
+              disabled={odometerBusy || !odometerStatus.running}
+              onPress={stopOdometer}
+              secondary
+            />
+            <ActionButton
+              label="Limpar distância"
+              disabled={odometerBusy}
+              onPress={clearOdometer}
+              secondary
+            />
+          </View>
           <View style={styles.card}>
             <View style={styles.statusRow}>
               <View
@@ -224,6 +311,7 @@ function App() {
               secondary={movementEnabled}
             />
           </View>
+          </>
         ) : null}
 
         {!screenMonitor.isAvailable || Platform.OS !== 'android' ? (
@@ -516,6 +604,13 @@ const styles = StyleSheet.create({
     color: colors.ink,
     fontSize: 17,
     fontWeight: '700',
+  },
+  odometerDistance: {
+    color: colors.accent,
+    fontSize: 36,
+    fontVariant: ['tabular-nums'],
+    fontWeight: '700',
+    marginTop: 10,
   },
   body: {
     color: colors.muted,

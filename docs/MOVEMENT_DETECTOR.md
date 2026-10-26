@@ -4,6 +4,32 @@ Este documento descreve a implementação Android em
 `android/app/src/main/java/com/copiloto/MovementMonitorModule.kt` e sua
 integração com React Native em `src/native/movementMonitor.ts`.
 
+## Odômetro GPS
+
+O painel Android também inclui um odômetro de teste com controles para iniciar,
+parar e limpar a distância. A medição é mantida em metros no módulo nativo e
+apresentada em quilômetros com três casas decimais. Parar preserva o valor;
+limpar zera o valor e a referência GPS atual, inclusive durante uma medição.
+
+O odômetro solicita atualizações dos provedores GPS e rede habilitados, em
+intervalos de um segundo, e só considera amostras com precisão reportada de até
+50 metros e intervalos monotônicos de no máximo 30 segundos. Se a posição não
+trouxer timestamp monotônico (como pode acontecer com posições simuladas), o
+horário de recebimento é usado. Saltos acima de 70 m/s são rejeitados e
+reiniciam a referência para evitar que uma posição fora de lugar seja contada
+mais tarde.
+
+O filtro mantém como referência a última posição que confirmou deslocamento.
+Assim, segmentos curtos não são descartados isoladamente: o deslocamento pode
+se acumular até superar a margem de ruído, baseada em 25% da soma das precisões
+reportadas, limitada entre dois e cinco metros. A margem é subtraída ao
+confirmar o segmento. Isso permite registrar deslocamentos lentos sem somar
+cada oscilação do GPS parado. O painel informa quando uma primeira posição foi
+recebida. GPS depende do dispositivo, do ambiente e da qualidade do sinal, então
+essa filtragem reduz leituras falsas, mas não substitui validação em campo.
+O odômetro não salva corridas ainda; a integração com as telas reconhecidas
+poderá ser adicionada posteriormente.
+
 ## O que o detector informa
 
 O detector publica somente um estado, sem mostrar nem transmitir velocidade:

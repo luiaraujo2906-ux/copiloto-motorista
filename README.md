@@ -59,6 +59,11 @@ testar caminhando; para uso real, configure **20 km/h**. Detalhes do fluxo,
 recursos Android, filtragem, permissões, constantes e instruções de teste estão
 na [documentação do detector](./docs/MOVEMENT_DETECTOR.md).
 
+O painel Android também oferece um odômetro GPS de teste com ações para
+iniciar, parar e limpar a distância. O valor é atualizado em quilômetros e a
+filtragem descarta posições imprecisas e saltos improváveis. A distância ainda
+não é persistida nem associada às telas reconhecidas.
+
 ## Captura e modelo de dados
 
 - O serviço coleta textos, descrições, classe e ID de recurso em

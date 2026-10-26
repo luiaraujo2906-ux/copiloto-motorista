@@ -31,9 +31,15 @@ class MovementMonitorModule(
     appContext.getSystemService(Context.LOCATION_SERVICE) as LocationManager
   private val stepTimes = ArrayDeque<Long>()
   private val gpsSpeeds = ArrayDeque<Float>()
+  private val gpsProviders = mutableSetOf<String>()
   private var stepSensor: Sensor? = null
   private var running = false
   private var gpsStarted = false
+  private var gpsIntervalMillis = 0L
+  private var odometerRunning = false
+  private var odometerDistanceMeters = 0.0
+  private var lastOdometerLocation: Location? = null
+  private var odometerHasFix = false
   private var gpsSamplesAboveThreshold = 0
   private var gpsSamplesBelowThreshold = 0
   private var state = "unknown"
@@ -43,6 +49,8 @@ class MovementMonitorModule(
 
   override fun invalidate() {
     running = false
+    odometerRunning = false
+    lastOdometerLocation = null
     handler.removeCallbacks(gpsFallbackCheck)
     handler.removeCallbacks(stepTimeout)
     sensorManager.unregisterListener(this)
@@ -106,6 +114,55 @@ class MovementMonitorModule(
   }
 
   @ReactMethod
+  fun odometerStart(promise: com.facebook.react.bridge.Promise) {
+    if (!hasPermission(Manifest.permission.ACCESS_FINE_LOCATION)) {
+      promise.reject("E_ODOMETER_PERMISSION", "Location permission is required for the odometer.")
+      return
+    }
+
+    odometerRunning = true
+    lastOdometerLocation = null
+    odometerHasFix = false
+    try {
+      if (!startGps()) {
+        odometerRunning = false
+        promise.reject(
+          "E_ODOMETER_START",
+          "No enabled location provider could start. Enable location services and try again.",
+        )
+        return
+      }
+      emitOdometer()
+      promise.resolve(null)
+    } catch (error: Exception) {
+      odometerRunning = false
+      stopGps()
+      promise.reject("E_ODOMETER_START", "Could not start the odometer.", error)
+    }
+  }
+
+  @ReactMethod
+  fun odometerStop(promise: com.facebook.react.bridge.Promise) {
+    odometerRunning = false
+    lastOdometerLocation = null
+    if (running) {
+      startGps()
+    } else {
+      stopGps()
+    }
+    emitOdometer()
+    promise.resolve(null)
+  }
+
+  @ReactMethod
+  fun odometerClear(promise: com.facebook.react.bridge.Promise) {
+    odometerDistanceMeters = 0.0
+    lastOdometerLocation = null
+    emitOdometer()
+    promise.resolve(null)
+  }
+
+  @ReactMethod
   fun addListener(eventName: String) = Unit
 
   @ReactMethod
@@ -131,13 +188,11 @@ class MovementMonitorModule(
   override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) = Unit
 
   override fun onLocationChanged(location: Location) {
-    if (
-      !running ||
-      !location.hasAccuracy() ||
-      location.accuracy > MAX_GPS_ACCURACY_METERS
-    ) {
-      return
+    if (odometerRunning) {
+      updateOdometer(location)
     }
+
+    if (!running || !location.hasAccuracy() || location.accuracy > MAX_GPS_ACCURACY_METERS) return
 
     val speedKmh = if (location.hasSpeed()) {
       location.speed * METERS_PER_SECOND_TO_KMH
@@ -209,32 +264,119 @@ class MovementMonitorModule(
     }
   }
 
-  private fun startGps() {
-    if (!running || gpsStarted) return
+  private fun startGps(): Boolean {
+    if (!running && !odometerRunning) return false
     if (!hasPermission(Manifest.permission.ACCESS_FINE_LOCATION)) {
       updateState("unknown", "gps")
-      return
+      return false
+    }
+    val requestedInterval =
+      if (odometerRunning) ODOMETER_GPS_INTERVAL_MILLIS else GPS_UPDATE_INTERVAL_MILLIS
+    if (gpsStarted && gpsIntervalMillis == requestedInterval) return true
+    if (gpsStarted) {
+      locationManager.removeUpdates(this)
+      gpsProviders.clear()
+      gpsStarted = false
+      gpsIntervalMillis = 0L
+    }
+
+    val provider = listOf(
+      LocationManager.GPS_PROVIDER,
+      LocationManager.NETWORK_PROVIDER,
+    ).firstOrNull { provider ->
+      try {
+        locationManager.isProviderEnabled(provider)
+      } catch (error: SecurityException) {
+        false
+      }
+    } ?: run {
+      updateState("unknown", "gps")
+      return false
     }
     try {
       locationManager.requestLocationUpdates(
-        LocationManager.GPS_PROVIDER,
-        GPS_UPDATE_INTERVAL_MILLIS,
+        provider,
+        requestedInterval,
         0f,
         this,
         Looper.getMainLooper(),
       )
-      gpsStarted = true
+      gpsProviders.add(provider)
     } catch (error: SecurityException) {
       updateState("unknown", "gps")
+      return false
     } catch (error: IllegalArgumentException) {
       updateState("unknown", "gps")
+      return false
     }
+    gpsStarted = gpsProviders.isNotEmpty()
+    if (gpsStarted) {
+      gpsIntervalMillis = requestedInterval
+      return true
+    }
+    updateState("unknown", "gps")
+    return false
   }
 
   private fun stopGps() {
+    if (running || odometerRunning) return
     if (!gpsStarted) return
     locationManager.removeUpdates(this)
+    gpsProviders.clear()
     gpsStarted = false
+    gpsIntervalMillis = 0L
+  }
+
+  private fun updateOdometer(location: Location) {
+    odometerHasFix = true
+    val sample = Location(location)
+    if (sample.elapsedRealtimeNanos <= 0L) {
+      sample.elapsedRealtimeNanos = android.os.SystemClock.elapsedRealtimeNanos()
+    }
+    if (
+      !sample.hasAccuracy() ||
+      sample.accuracy > ODOMETER_MAX_ACCURACY_METERS
+    ) {
+      emitOdometer()
+      return
+    }
+
+    val previous = lastOdometerLocation
+    if (previous == null) {
+      lastOdometerLocation = sample
+      emitOdometer()
+      return
+    }
+    if (sample.elapsedRealtimeNanos <= previous.elapsedRealtimeNanos) return
+
+    val elapsedSeconds =
+      (sample.elapsedRealtimeNanos - previous.elapsedRealtimeNanos) / NANOS_PER_SECOND
+    if (elapsedSeconds > ODOMETER_MAX_SAMPLE_GAP_SECONDS) {
+      lastOdometerLocation = sample
+      return
+    }
+    if (elapsedSeconds <= 0.0) return
+    if (previous.accuracy > ODOMETER_MAX_ACCURACY_METERS) return
+
+    val distanceMeters = previous.distanceTo(sample).toDouble()
+    val maxPlausibleDistance = elapsedSeconds * ODOMETER_MAX_SPEED_METERS_PER_SECOND
+    if (!distanceMeters.isFinite()) return
+    if (distanceMeters > maxPlausibleDistance) {
+      lastOdometerLocation = sample
+      return
+    }
+
+    val accuracyNoiseMeters =
+      maxOf(
+        ODOMETER_MIN_NOISE_METERS,
+        ((previous.accuracy + sample.accuracy).toDouble() * ODOMETER_NOISE_FACTOR)
+          .coerceAtMost(ODOMETER_MAX_NOISE_METERS),
+      )
+    if (distanceMeters <= accuracyNoiseMeters) return
+
+    lastOdometerLocation = sample
+    odometerDistanceMeters += distanceMeters - accuracyNoiseMeters
+    emitOdometer()
   }
 
   private fun hasPermission(permission: String): Boolean =
@@ -265,6 +407,22 @@ class MovementMonitorModule(
     }
   }
 
+  private fun emitOdometer() {
+    if (!appContext.hasActiveReactInstance()) return
+    val payload = Arguments.createMap().apply {
+      putDouble("distanceMeters", odometerDistanceMeters)
+      putBoolean("running", odometerRunning)
+      putBoolean("hasFix", odometerHasFix)
+    }
+    appContext.runOnJSQueueThread {
+      if (appContext.hasActiveReactInstance()) {
+        appContext
+          .getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter::class.java)
+          .emit("odometerChanged", payload)
+      }
+    }
+  }
+
   companion object {
     private const val MOVEMENT_THRESHOLD_KMH = 1.0f
     private const val WALKING_TEST_MAX_THRESHOLD_KMH = 5.0f
@@ -277,5 +435,13 @@ class MovementMonitorModule(
     private const val REQUIRED_STEPS = 3
     private const val STEP_WINDOW_MILLIS = 4_000L
     private const val STEP_QUIET_TIMEOUT_MILLIS = 4_000L
+    private const val ODOMETER_GPS_INTERVAL_MILLIS = 1_000L
+    private const val ODOMETER_MAX_ACCURACY_METERS = 50f
+    private const val ODOMETER_MIN_NOISE_METERS = 2.0
+    private const val ODOMETER_NOISE_FACTOR = 0.25
+    private const val ODOMETER_MAX_NOISE_METERS = 5.0
+    private const val ODOMETER_MAX_SPEED_METERS_PER_SECOND = 70.0
+    private const val ODOMETER_MAX_SAMPLE_GAP_SECONDS = 30.0
+    private const val NANOS_PER_SECOND = 1_000_000_000.0
   }
 }
