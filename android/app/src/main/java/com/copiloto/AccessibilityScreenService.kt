@@ -3,24 +3,15 @@ package com.copiloto
 import android.accessibilityservice.AccessibilityService
 import android.accessibilityservice.AccessibilityService.ScreenshotResult
 import android.graphics.Bitmap
-import android.graphics.Color
 import android.graphics.Rect
-import android.graphics.Typeface
-import android.graphics.drawable.GradientDrawable
 import android.hardware.display.DisplayManager
 import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import android.util.DisplayMetrics
 import android.view.Display
-import android.view.Gravity
-import android.view.WindowManager
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
-import android.widget.FrameLayout
-import android.widget.LinearLayout
-import android.widget.TextView
-import android.view.View
 import com.facebook.react.bridge.Arguments
 import com.facebook.react.bridge.WritableArray
 import com.facebook.react.bridge.WritableMap
@@ -36,14 +27,11 @@ import java.util.concurrent.Executor
 class AccessibilityScreenService : AccessibilityService() {
   private val handler = Handler(Looper.getMainLooper())
   private val mainExecutor: Executor = Executor { command -> handler.post(command) }
-  private val windowManager by lazy { getSystemService(WindowManager::class.java) }
   private val maxNodes = 500
   private var analysisSequence = 0L
   private var pendingAnalysis: Runnable? = null
   private var recognizer = TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS)
   private var lastFingerprint: String? = null
-  private var fareSignalView: FrameLayout? = null
-  private var fareSignalDismiss: Runnable? = null
 
   override fun onServiceConnected() {
     super.onServiceConnected()
@@ -59,7 +47,6 @@ class AccessibilityScreenService : AccessibilityService() {
     if (event == null || !isRelevantEvent(event.eventType)) return
 
     if (!ScreenMonitorSettings.isMonitoring(this)) {
-      hideFareSignal()
       lastFingerprint = null
       return
     }
@@ -77,7 +64,6 @@ class AccessibilityScreenService : AccessibilityService() {
       analysisSequence += 1
       pendingAnalysis?.let(handler::removeCallbacks)
       pendingAnalysis = null
-      hideFareSignal()
       lastFingerprint = null
       return
     }
@@ -92,146 +78,7 @@ class AccessibilityScreenService : AccessibilityService() {
     handler.postDelayed(pendingAnalysis!!, SCREEN_SETTLE_DELAY_MILLIS)
   }
 
-  fun showFareSignal(
-    fare: String,
-    distance: String,
-    time: String,
-    rate: String,
-    suggestedFare: String,
-    classification: String,
-    backgroundColor: String,
-    onComplete: (Exception?) -> Unit,
-  ) {
-    handler.post {
-      try {
-        fareSignalDismiss?.let(handler::removeCallbacks)
-        fareSignalView?.let(windowManager::removeView)
-
-        val card = LinearLayout(this).apply {
-          orientation = LinearLayout.HORIZONTAL
-          gravity = Gravity.CENTER_VERTICAL
-          setPadding(dp(16), dp(12), dp(16), dp(12))
-          background = GradientDrawable().apply {
-            setColor(Color.parseColor(backgroundColor))
-            cornerRadius = dp(14).toFloat()
-          }
-          elevation = dp(8).toFloat()
-        }
-        val offerDetails = LinearLayout(this).apply {
-          orientation = LinearLayout.VERTICAL
-          addView(
-            TextView(this@AccessibilityScreenService).apply {
-              text = "FAROL DE VALORES · ${classification.uppercase()}"
-              setTextColor(Color.WHITE)
-              textSize = 14f
-              setTypeface(typeface, Typeface.BOLD)
-            },
-          )
-          addView(signalText(fare, 22f, true))
-          addView(signalText("$distance · $time", 15f))
-          addView(signalText("$rate", 15f, true))
-        }
-        card.addView(
-          offerDetails,
-          LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f),
-        )
-        card.addView(
-          View(this@AccessibilityScreenService).apply {
-            setBackgroundColor(Color.argb(110, 255, 255, 255))
-          },
-          LinearLayout.LayoutParams(dp(1), dp(64)).apply {
-            marginStart = dp(12)
-            marginEnd = dp(12)
-          },
-        )
-        card.addView(
-          LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            gravity = Gravity.CENTER_VERTICAL or Gravity.END
-            addView(
-              TextView(this@AccessibilityScreenService).apply {
-                text = "VALOR SUGERIDO"
-                setTextColor(Color.WHITE)
-                textSize = 11f
-                setTypeface(typeface, Typeface.BOLD)
-                gravity = Gravity.END
-              },
-            )
-            addView(
-              TextView(this@AccessibilityScreenService).apply {
-                text = suggestedFare
-                setTextColor(Color.WHITE)
-                textSize = 20f
-                setTypeface(typeface, Typeface.BOLD)
-                gravity = Gravity.END
-                maxLines = 1
-              },
-            )
-          },
-        )
-
-        val overlay = FrameLayout(this).apply {
-          setPadding(dp(16), dp(8), dp(16), dp(8))
-          addView(
-            card,
-            FrameLayout.LayoutParams(
-              FrameLayout.LayoutParams.MATCH_PARENT,
-              FrameLayout.LayoutParams.WRAP_CONTENT,
-            ),
-          )
-        }
-        val layoutParams = WindowManager.LayoutParams(
-          WindowManager.LayoutParams.MATCH_PARENT,
-          WindowManager.LayoutParams.WRAP_CONTENT,
-          WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY,
-          WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
-            WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE or
-            WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
-          android.graphics.PixelFormat.TRANSLUCENT,
-        ).apply {
-          gravity = Gravity.TOP
-          y = dp(24)
-        }
-        windowManager.addView(overlay, layoutParams)
-        fareSignalView = overlay
-
-        val dismiss = Runnable { removeFareSignalView() }
-        fareSignalDismiss = dismiss
-        handler.postDelayed(dismiss, FARE_SIGNAL_DURATION_MILLIS)
-        onComplete(null)
-      } catch (error: Exception) {
-        removeFareSignalView()
-        onComplete(error)
-      }
-    }
-  }
-
-  fun hideFareSignal() {
-    handler.post { removeFareSignalView() }
-  }
-
-  private fun signalText(text: String, size: Float, bold: Boolean = false) =
-    TextView(this).apply {
-      this.text = text
-      setTextColor(Color.WHITE)
-      textSize = size
-      if (bold) setTypeface(typeface, Typeface.BOLD)
-      setPadding(0, dp(2), 0, dp(2))
-    }
-
-  private fun removeFareSignalView() {
-    fareSignalDismiss?.let(handler::removeCallbacks)
-    fareSignalDismiss = null
-    fareSignalView?.let { view ->
-      if (view.isAttachedToWindow) {
-        windowManager.removeView(view)
-      }
-    }
-    fareSignalView = null
-  }
-
-  private fun dp(value: Int): Int =
-    (value * resources.displayMetrics.density).toInt()
+  override fun onInterrupt() = Unit
 
   private fun isRelevantEvent(eventType: Int): Boolean =
     eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED ||
@@ -463,13 +310,8 @@ class AccessibilityScreenService : AccessibilityService() {
     TargetAppPackages.contains(expectedPackage) &&
       rootInActiveWindow?.packageName?.toString() == expectedPackage
 
-  override fun onInterrupt() {
-    hideFareSignal()
-  }
-
   override fun onDestroy() {
     pendingAnalysis?.let(handler::removeCallbacks)
-    removeFareSignalView()
     if (currentService === this) currentService = null
     recognizer.close()
     super.onDestroy()

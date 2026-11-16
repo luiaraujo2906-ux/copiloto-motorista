@@ -2,11 +2,10 @@
 
 O farol de valores estima a tarifa bruta por quilômetro de uma oferta de
 corrida. Quando a tela identificada como `ride-offer` contém os dados
-necessários, o Android mostra um cartão colorido no topo da tela, inclusive
-sobre outros aplicativos. O cartão mostra valor da corrida, distância total,
-tempo total, tarifa por quilômetro e classificação. À direita, separado por
-uma divisória, aparece o valor sugerido de acordo com a tarifa que o motorista
-configurou no app.
+necessários, o painel do Copiloto exibe um cartão colorido com valor da corrida,
+distância total, tempo total, tarifa por quilômetro e classificação, além do
+valor sugerido com base na tarifa configurada. O cartão aparece somente dentro
+do app; nenhuma janela é desenhada sobre o aplicativo de corrida.
 
 ## Fluxo de implementação
 
@@ -19,23 +18,11 @@ configurou no app.
    a oferta quando encontra categoria (`Moto` ou `Carro`), valor da corrida,
    trecho de embarque e trecho até o destino.
 3. `App.tsx` passa os campos extraídos e a tarifa configurada para
-   `calculateFareSignal` em `src/screen/fareSignal.ts`. Se os valores forem
-   válidos, chama `ScreenMonitor.showFareSignal` pelo módulo nativo. Se a
-   observação não resultar em uma oferta calculável, solicita que o popup seja
-   ocultado. A tarifa desejada pode ser alterada na seção **Tarifa por
-   quilômetro** e é salva pelo módulo nativo nas preferências privadas do app.
-4. `ScreenMonitorModule.kt` encaminha a chamada para o serviço de
-   acessibilidade. `AccessibilityScreenService.kt` cria uma janela
-   `TYPE_ACCESSIBILITY_OVERLAY`, não focalizável e não tocável, no topo da tela.
-   A própria permissão do serviço de acessibilidade autoriza esse tipo de
-   janela; não é usada a permissão genérica de sobreposição. O conteúdo é uma
-   linha horizontal: detalhes e farol ficam à esquerda, enquanto o valor
-   sugerido fica à direita com uma divisória vertical.
-5. O serviço remove a janela quando o prazo expira, quando recebe uma
-   solicitação explícita para ocultar, quando a captura é pausada ou quando
-   eventos indicam que um app fora da lista de monitoramento está em primeiro
-   plano. Eventos da própria janela do Copiloto são ignorados para não ocultar
-   o cartão que acabou de ser mostrado.
+   `calculateFareSignal` em `src/screen/fareSignal.ts` e mantém o resultado no
+   estado da interface. Quando a tela deixa de ser uma oferta calculável, o
+   cartão é removido do painel. A tarifa desejada pode ser alterada na seção
+   **Tarifa por quilômetro** e é salva pelo módulo nativo nas preferências
+   privadas do app.
 
 ## Cálculo e classificação
 
@@ -66,21 +53,13 @@ tempo parado, comissão, impostos ou deslocamentos após o destino.
 
 | Ajuste | Local | Valor atual | Efeito |
 | --- | --- | --- | --- |
-| Tempo máximo de exibição | `AccessibilityScreenService.kt`, `FARE_SIGNAL_DURATION_MILLIS` | `10_000L` (10 s) | Tempo até o popup ser removido automaticamente. Uma nova oferta mostrada reinicia o temporizador. |
 | Debounce da análise | `AccessibilityScreenService.kt`, `SCREEN_SETTLE_DELAY_MILLIS` | `800L` | Espera após eventos da tela antes de coletar textos e executar OCR. Aumentar pode evitar leitura de telas ainda renderizando, mas atrasa o farol. |
 | Limite de nós de acessibilidade | `AccessibilityScreenService.kt`, `maxNodes` | `500` | Limita a quantidade de nós visitados por análise. |
 | Limites de classificação | `src/screen/fareSignal.ts`, classificação em `calculateFareSignal` | `1.3` e `1.5` R$/km | Altera as fronteiras entre ruim, média e boa. Atualize também os testes em `fareSignal.test.ts`. |
 | Tarifa desejada pelo motorista | App: seção **Tarifa por quilômetro**; persistência em `ScreenMonitorModule.kt` | `1,50` R$/km | Determina o valor sugerido (`distância total * tarifa desejada`). Aceita valores maiores que zero até R$ 1.000,00/km; fica salva nas preferências privadas do Android. |
-| Cores | `src/screen/fareSignal.ts`, `backgroundColor` | vermelho `#C62828`, amarelo `#F9A825`, verde `#2E7D32` | Cor retornada pelo cálculo e aplicada ao cartão nativo. |
+| Cores | `src/screen/fareSignal.ts`, `backgroundColor` | vermelho `#C62828`, amarelo `#F9A825`, verde `#2E7D32` | Cor retornada pelo cálculo e aplicada ao cartão no app. |
 | Formatos de extração | `src/screen/screenRegistry.ts`, definição `ride-offer` | moeda `R$`, tempo `min`, distância `m`/`km` | Determina quais textos formam uma oferta e quais dois trechos são usados. |
-| Apps monitorados | `TargetAppPackages.kt` | lista de pacotes configurada no código | Pacotes fora da lista não são analisados e podem provocar o encerramento do popup ao passarem para primeiro plano. |
-
-O cartão ocupa toda a largura disponível, tem margens horizontais de 16 dp,
-deslocamento vertical de 24 dp e margens internas de 8 dp (`dp()` converte os
-valores para pixels conforme a densidade do dispositivo). A divisória tem 1 dp
-de largura e a área do valor sugerido fica alinhada à direita. Esses valores e
-os tamanhos tipográficos são definidos na criação da janela em
-`AccessibilityScreenService.kt`.
+| Apps monitorados | `TargetAppPackages.kt` | lista de pacotes configurada no código | Pacotes fora da lista não são analisados. |
 
 ## Gargalos e limitações
 
@@ -111,15 +90,10 @@ os tamanhos tipográficos são definidos na criação da janela em
   configuração muito baixa ou alta produz um valor sugerido igualmente
   inadequado. O limite de entrada de R$ 1.000,00/km apenas evita valores
   absurdos por erro de digitação.
-- **Eventos de janela:** a saída do app-alvo encerra o popup; certos apps ou
-  telas do sistema podem não gerar eventos de acessibilidade relevantes, então
-  o cartão pode permanecer até completar os dez segundos. A implementação
-  também ignora eventos do Copiloto e preserva o cartão se a janela ativa ainda
-  pertencer a um pacote monitorado.
-- **Plataforma e permissão:** a sobreposição depende do serviço de
-  acessibilidade habilitado e do Android. Não está disponível no iOS. Se o
-  serviço for desativado ou desconectado, não será possível apresentar o
-  popup.
+- **Exibição:** o cartão é parte da interface do Copiloto e não fica visível
+  sobre outros apps. Abra o Copiloto para consultar o resultado reconhecido.
+- **Plataforma:** a captura e o cálculo dependem do serviço de acessibilidade
+  habilitado e do Android. O farol não está disponível no iOS.
 
 ## Testes
 

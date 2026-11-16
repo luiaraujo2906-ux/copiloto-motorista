@@ -98,14 +98,28 @@ não é persistida nem associada às telas reconhecidas.
   a partir dos padrões de texto definidos.
   A identificação roda somente quando chega uma observação alterada; o debounce
   e o fingerprint do serviço Android evitam polling ou reprocessamento de telas
-  sem mudanças. A tela identificada e o provider aparecem no app e no painel
-  web.
-- Ao reconhecer uma oferta, o Android exibe por até dez segundos um farol
-  sobre outros apps: o valor da corrida dividido pela distância total
+  sem mudanças. As palavras encontradas e telas identificadas são enviadas ao
+  painel web quando o WebSocket está conectado; o app não mostra esse conteúdo.
+  Ao identificar uma tela de encerramento, o app é trazido para primeiro plano
+  e exibe a tela de pagamento dentro da própria interface, sem janelas de
+  sobreposição.
+  **Informar valor** alterna o QR pelos atalhos e campo de valor; ao escolher
+  um atalho ou confirmar um valor digitado, o QR é atualizado com o valor e o
+  status indica quanto receber. O valor extraído pelo OCR aparece como primeiro
+  atalho; ao usar o valor, o teclado fecha automaticamente. **Confirmar
+  pagamento** registra o valor no histórico local e **Cancelar** fecha a tela
+  sem registrar. O teclado permanece no contexto normal do app. Nas abas
+  **Configurações** e **Histórico**, é possível configurar a chave, o nome e a
+  cidade Pix, gerenciar os atalhos, abrir a tela para um pagamento manual e
+  filtrar pagamentos por intervalo de datas. O filtro inicia no dia atual e
+  permite escolher as datas em um calendário; o total acompanha os pagamentos
+  exibidos. O BR Code gerado remove máscaras de chaves numéricas e normaliza
+  nome/cidade para texto sem acentos. O app não inicia uma transferência.
+- Ao reconhecer uma oferta, o farol de valores aparece no painel do próprio
+  app: o valor da corrida dividido pela distância total
   (embarque + destino), junto com distância e tempo totais. Abaixo de
   R$ 1,30/km é ruim (vermelho), de R$ 1,30/km até menos de R$ 1,50/km é média
-  (amarelo) e a partir de R$ 1,50/km é boa (verde). O popup some antes se a
-  tela de oferta deixar de estar visível. A tarifa desejada do motorista é
+  (amarelo) e a partir de R$ 1,50/km é boa (verde). A tarifa desejada do motorista é
   ajustável na interface; o farol mostra o valor sugerido pela distância total
   vezes essa tarifa. Consulte a
   [documentação do farol](./docs/FARE_SIGNAL.md) para detalhes da implementação,
